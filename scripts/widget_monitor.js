@@ -736,7 +736,7 @@ function processAllBlocks(startFrom, date, callback){
       if(timeConverter((startFrom-12*60*60)) != date) {
         processAllBlocks(startFrom, timeConverter((startFrom-12*60*60)), callback);
       } else {
-        callback(null, filterBlock);
+        callback(null, filterBlock.reverse());
       }
     } else return callback(new Error('request error'), null);
   };
@@ -941,6 +941,7 @@ function getProofByMyid(myid, callback){
         else if(typeof query_info['checks'] !== 'undefined') {
           if(query_info['checks'].length>0){
             for (var k = 0; k < query_info['checks'].length; k++) {
+              //if(query_info['checks'][k]['timestamp'] < (Math.floor(Date.now() / 1000)-12*60*60)) continue;
               for (var j = 0; j < query_info['checks'][k]['proofs'].length; j++) {
                 proofListArray.push(query_info['checks'][k]['proofs'][j]);
               }
@@ -1026,9 +1027,11 @@ function asyncLoop(iterations, func, callback) {
 
 var latestBlockHeightProcessed = -1;
 
-var alreadyStarted = true;
+var alreadyStarted = false;
 // sync data and chart every 20 seconds
 function go(){
+  if(alreadyStarted == true) return;
+  alreadyStarted = true;
   postMessage({ type: 'statusUpdate', value: ['ethnode', 2] });
   postMessage({ type: 'hlUpdate', value: ['ethnode', true] });
   getCurrentBlock(function(e, r){
@@ -1070,7 +1073,7 @@ function go(){
   console.log("Downloading "+(i0+1)+" new blocks..");
   var newproofs = 0;
   ourTxs = {}; 
-  processAllBlocks(Math.floor(Date.now() / 1000) - 20*60*60, getToday(), function(e, result){
+  processAllBlocks(Math.floor(Date.now() / 1000), getToday(), function(e, result){
     if(e){
       console.error(e);
       return;
@@ -1091,11 +1094,12 @@ function go(){
       postMessage({ type: 'blockLoad_update', value: parseInt(100*blockList.length/(step*sstep)) });
       getRawBlock(r['hash'], function(err,res){
         if(err) return;
-        latestBlockHeightProcessed = r.height;
         // Check if block contains an Oraclize marker
         var markers = processBlock(res);
         console.log(markers);
-        if(alreadyStarted == false && latestBlockHeightProcessed > r.height) return loop.next();
+        //console.log(r.height);
+        //if(latestBlockHeightProcessed > r.height) return loop.next();
+        latestBlockHeightProcessed = r.height;
         if (typeof markers !== 'undefined' && typeof markers != 'null' && markers.length>0){
           for (var j = 0; j < markers.length; j++) {
             //console.log(JSON.stringify(r[k]));
@@ -1117,9 +1121,6 @@ function go(){
           }
         }
         txs_loaded++;
-        if(alreadyStarted == true) {
-          alreadyStarted = false;
-        }
         if(loop.iteration() == (result.length-1)) return startChart();
         loop.next();
       });
