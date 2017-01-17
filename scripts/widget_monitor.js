@@ -840,8 +840,8 @@ function fixDataSource(){
 }
 
 
-var step = 50;
-var sstep = 45;
+var step = 10;
+var sstep = 5;
 
 var atx = 0;
 var txs_loaded = 0;
@@ -932,15 +932,23 @@ function getProofByMyid(myid){
 
   xhr2.onload = function(e) {
     if (this.status == 200) {
+      var proofListArray = [];
       var query_info = JSON.parse(this.response).result;
-      var proofType = query_info.payload.conditions[0].proof_type;
-      if(proofType == 0) return '';
-      try {
-        var query_proof = query_info['checks'][query_info['checks'].length-1]['proofs'][0];
-      } catch(e) {
-        return '';
+      var conditionsLength = query_info.payload.conditions;//[0].proof_type;
+      for (var i = 0; i < conditionsLength.length; i++) {
+        if(conditionsLength[i].proof_type == 0) proofListArray.push('');
+        else if(typeof query_info['checks'] !== 'undefined') {
+          if(query_info['checks'].length>0){
+            for (var k = 0; k < query_info['checks'].length; k++) {
+              for (var j = 0; j < query_info['checks'][k]['proofs'].length; j++) {
+                proofListArray.push(query_info['checks'][k]['proofs'][j]);
+              }
+            }
+          }
+        }
       }
-      return query_proof;
+      console.log(proofListArray);
+      return proofListArray;
     } else return console.error('oraclize request error')
   };
 
@@ -1016,11 +1024,11 @@ function asyncLoop(iterations, func, callback) {
     return loop;
 }
 
-var alreadyStarted = false;
+var latestBlockHeightProcessed = -1;
+
+var alreadyStarted = true;
 // sync data and chart every 20 seconds
 function go(){
-  if(alreadyStarted == true) return;
-  alreadyStarted = true;
   postMessage({ type: 'statusUpdate', value: ['ethnode', 2] });
   postMessage({ type: 'hlUpdate', value: ['ethnode', true] });
   getCurrentBlock(function(e, r){
@@ -1072,7 +1080,7 @@ function go(){
     asyncLoop(result.length, function(loop){
       var r = result[loop.iteration()];
       //console.log(r);
-      if(typeof r == "undefined") loop.next();
+      if(typeof r == "undefined") return;
       postMessage({ type: 'textUpdate', value: ['ethnode_lastblockn', "In sync w/ block #"+r.height] });
       ethnode_kb += r.size/1000;
       postMessage({ type: 'textUpdate', value: ['ethnode_kb', parseInt(ethnode_kb)] });
@@ -1080,29 +1088,38 @@ function go(){
       if (typeof ourTxs[parseInt(r.height/step)] == 'undefined') ourTxs[parseInt(r.height/step)] = [[], []];
       txs_count += r.length;
       //var cbAddressActive = cbAddress[chain];
-      //postMessage({ type: 'blockLoad_update', value: parseInt(100*blockList.length/(step*sstep)) });
+      postMessage({ type: 'blockLoad_update', value: parseInt(100*blockList.length/(step*sstep)) });
       getRawBlock(r['hash'], function(err,res){
-        if(err) loop.next();
+        if(err) return;
+        latestBlockHeightProcessed = r.height;
         // Check if block contains an Oraclize marker
         var markers = processBlock(res);
         console.log(markers);
+        if(alreadyStarted == false && latestBlockHeightProcessed > r.height) return loop.next();
         if (typeof markers !== 'undefined' && typeof markers != 'null' && markers.length>0){
           for (var j = 0; j < markers.length; j++) {
             //console.log(JSON.stringify(r[k]));
             var httpMyid = getMyid(markers[j]);
             console.log("myid "+ httpMyid);
             if(typeof httpMyid != 'undefined' && httpMyid != ''){
-              atx++;
-              if (processProof(getProofByMyid(httpMyid)) != false){
-                // proof is there!
-                console.log("proof!");
-                newproofs++;
-                ourTxs[parseInt(r.height/step)][1].push(r);
-              } else ourTxs[parseInt(r.height/step)][0].push(r);
-            } else ourTxs[parseInt(r.height/step)][0].push(r);
+              var proofList = getProofByMyid(httpMyid);
+              console.log(proofList);
+              for (var z = 0; z < proofList.length; z++) {
+                atx++;
+                if (processProof(proofList[z]) != false){
+                  // proof is there!
+                  console.log("proof!");
+                  newproofs++;
+                  ourTxs[parseInt(r.height/step)][1].push(r);
+                } else ourTxs[parseInt(r.height/step)][0].push(r);
+              }
+            }
           }
-        } else ourTxs[parseInt(r.height/step)][0].push(r);
+        }
         txs_loaded++;
+        if(alreadyStarted == true) {
+          alreadyStarted = false;
+        }
         if(loop.iteration() == (result.length-1)) return startChart();
         loop.next();
       });
