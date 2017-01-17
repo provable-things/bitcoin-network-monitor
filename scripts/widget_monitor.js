@@ -984,8 +984,43 @@ function processBlock(rawBlock){
 
 getOraclizeMarkers();
 
+function asyncLoop(iterations, func, callback) {
+    var index = 0;
+    var done = false;
+    var loop = {
+        next: function() {
+            if (done) {
+                return;
+            }
+
+            if (index < iterations) {
+                index++;
+                func(loop);
+
+            } else {
+                done = true;
+                callback();
+            }
+        },
+
+        iteration: function() {
+            return index - 1;
+        },
+
+        break: function() {
+            done = true;
+            callback();
+        }
+    };
+    loop.next();
+    return loop;
+}
+
+var alreadyStarted = false;
 // sync data and chart every 20 seconds
 function go(){
+  if(alreadyStarted == true) return;
+  alreadyStarted = true;
   postMessage({ type: 'statusUpdate', value: ['ethnode', 2] });
   postMessage({ type: 'hlUpdate', value: ['ethnode', true] });
   getCurrentBlock(function(e, r){
@@ -1033,10 +1068,11 @@ function go(){
       return;
     }
     console.log(result);
-    for (var i = 0; i < result.length; i++) {
-      var r = result[i];
+    //for (var i = 0; i < result.length; i++) {
+    asyncLoop(result.length, function(loop){
+      var r = result[loop.iteration()];
       //console.log(r);
-      if(typeof r == "undefined") continue;
+      if(typeof r == "undefined") loop.next();
       postMessage({ type: 'textUpdate', value: ['ethnode_lastblockn', "In sync w/ block #"+r.height] });
       ethnode_kb += r.size/1000;
       postMessage({ type: 'textUpdate', value: ['ethnode_kb', parseInt(ethnode_kb)] });
@@ -1046,17 +1082,17 @@ function go(){
       //var cbAddressActive = cbAddress[chain];
       //postMessage({ type: 'blockLoad_update', value: parseInt(100*blockList.length/(step*sstep)) });
       getRawBlock(r['hash'], function(err,res){
-        if(err) return;
+        if(err) loop.next();
         // Check if block contains an Oraclize marker
         var markers = processBlock(res);
         console.log(markers);
         if (typeof markers !== 'undefined' && typeof markers != 'null' && markers.length>0){
           for (var j = 0; j < markers.length; j++) {
-            atx++;
             //console.log(JSON.stringify(r[k]));
             var httpMyid = getMyid(markers[j]);
             console.log("myid "+ httpMyid);
             if(typeof httpMyid != 'undefined' && httpMyid != ''){
+              atx++;
               if (processProof(getProofByMyid(httpMyid)) != false){
                 // proof is there!
                 console.log("proof!");
@@ -1067,26 +1103,32 @@ function go(){
           }
         } else ourTxs[parseInt(r.height/step)][0].push(r);
         txs_loaded++;
-        txmonli = setInterval(function(){
-        setTimeout(function(){
-          postMessage({ 'type': "honesty_show" });
-          var proofsoffset = proofs.length;
-          fixDataSource();
-          postMessage({ 'type': "honesty_update", 'value': "<span style='color: orange'>checking proofs..</span>" });
-          checkProofs(proofsoffset);
-        }, 2500);
-        postMessage({ type: 'statusUpdate', value: ['ethnode', 1] });
-        postMessage({ type: 'hlUpdate', value: ['ethnode', false] });
-        postMessage({ type: 'hlUpdate', value: ['chart', false] });
-        postMessage({ type: 'chartUpdate', value: dataSource });
-        clearInterval(txmonli);
-        }, 800);
+        if(loop.iteration() == (result.length-1)) return startChart();
+        loop.next();
       });
-    }
+    });
   });
 }
 });
 }
+
+function startChart(){
+  txmonli = setInterval(function(){
+  setTimeout(function(){
+    postMessage({ 'type': "honesty_show" });
+    var proofsoffset = proofs.length;
+    fixDataSource();
+    postMessage({ 'type': "honesty_update", 'value': "<span style='color: orange'>checking proofs..</span>" });
+    checkProofs(proofsoffset);
+  }, 2500);
+  postMessage({ type: 'statusUpdate', value: ['ethnode', 1] });
+  postMessage({ type: 'hlUpdate', value: ['ethnode', false] });
+  postMessage({ type: 'hlUpdate', value: ['chart', false] });
+  postMessage({ type: 'chartUpdate', value: dataSource });
+  clearInterval(txmonli);
+  }, 800);
+}
+
 setTimeout(function(){
 // Start loop
 go();
