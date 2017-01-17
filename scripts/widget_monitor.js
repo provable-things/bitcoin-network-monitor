@@ -926,10 +926,11 @@ function getMyid(hash){
   return httpMyId;
 }
 
-function getProofByMyid(myid){
+function getProofByMyid(myid, callback){
   var xhr2 = new XMLHttpRequest();
   xhr2.open('GET', 'https://api.oraclize.it/v1/contract/'+myid+'/status', false);
-
+  var proofListArray = [];
+  var noProof = [""];
   xhr2.onload = function(e) {
     if (this.status == 200) {
       var proofListArray = [];
@@ -947,19 +948,18 @@ function getProofByMyid(myid){
           }
         }
       }
-      console.log(proofListArray);
-      return proofListArray;
-    } else return console.error('oraclize request error')
+      callback(proofListArray)
+    } else callback(noProof)
   };
 
   // Manage XHR error
   xhr2.onerror = function(e){
-    return console.error(e,'oraclize request error')
+    return callback(noProof)
   };
 
   // Manage XHR Timeouts
   xhr2.ontimeout = function(e){
-    return console.error(e,'oraclize request error')
+    return callback(noProof)
   };
 
   xhr2.send();
@@ -1102,17 +1102,17 @@ function go(){
             var httpMyid = getMyid(markers[j]);
             console.log("myid "+ httpMyid);
             if(typeof httpMyid != 'undefined' && httpMyid != ''){
-              var proofList = getProofByMyid(httpMyid);
-              console.log(proofList);
-              for (var z = 0; z < proofList.length; z++) {
-                atx++;
-                if (processProof(proofList[z]) != false){
-                  // proof is there!
-                  console.log("proof!");
-                  newproofs++;
-                  ourTxs[parseInt(r.height/step)][1].push(r);
-                } else ourTxs[parseInt(r.height/step)][0].push(r);
-              }
+              getProofByMyid(httpMyid, function(proofList){
+                for (var z = 0; z < proofList.length; z++) {
+                  atx++;
+                  if (processProof(proofList[z]) != false){
+                    // proof is there!
+                    console.log("proof!");
+                    newproofs++;
+                    ourTxs[parseInt(r.height/step)][1].push(r);
+                  } else ourTxs[parseInt(r.height/step)][0].push(r);
+                }
+              });
             }
           }
         }
