@@ -223,26 +223,15 @@ try{
   loadWidgetStd();
 }
 
+// Public eth node
 var ethnode_name_list = {
-  /*'http://eth-node-1.oraclize.it/': {
-    'desc':'Oraclize Public Node - Mainnet',
+  'https://test-insight.bitpay.com' : {
+    'desc': 'Bitpay Public Insight - Testnet',
+    'alias':'testnet'
+  },
+  'https://insight.bitpay.com': {
+    'desc': 'Bitpay Public Insight - Mainnet',
     'alias':'mainnet'
-  },
-  'http://eth-testnet-node-1.oraclize.it/': {
-    'desc':'Oraclize Public Node - Ropsten Testnet',
-    'alias':'testnet'
-  },*/
-  'https://mainnet.infura.io/YwngtTceY6FmxDsqpgLf' : {
-    'desc': 'Infura - Mainnet',
-    'alias':'mainnet'
-  },
-  'https://eth3.augur.net': {
-    'desc':'Augur - Ropsten Testnet',
-    'alias':'testnet'
-  },
-  'https://test-node2929.etherscan.io/': {
-    'desc':'Etherscan - Ropsten Testnet',
-    'alias':'testnet'
   }
 };
 

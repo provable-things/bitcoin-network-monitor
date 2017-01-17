@@ -10,17 +10,13 @@ var ethereum_node_list = [];
 
 // Public eth node
 var ethnode_name_list = {
-  'https://mainnet.infura.io/YwngtTceY6FmxDsqpgLf' : {
-    'desc': 'Infura - Mainnet',
+  'https://test-insight.bitpay.com' : {
+    'desc': 'Bitpay Public Insight - Testnet',
+    'alias':'testnet'
+  },
+  'https://insight.bitpay.com': {
+    'desc': 'Bitpay Public Insight - Mainnet',
     'alias':'mainnet'
-  },
-  'https://eth3.augur.net': {
-    'desc':'Augur - Ropsten Testnet',
-    'alias':'testnet'
-  },
-  'https://test-node2929.etherscan.io/': {
-    'desc':'Etherscan - Ropsten Testnet',
-    'alias':'testnet'
   }
 };
 
@@ -37,7 +33,7 @@ var normal_start = true;
 var hash_is_set = false;
 
 // Current ethnode chain (default main net)
-current_ethnode_chain = 'mainnet';
+current_ethnode_chain = 'testnet';
 
 function startup_tasks(){
 setTimeout(function(){
@@ -107,6 +103,7 @@ if ((typeof stdLoad == 'undefined')||(stdLoad == false)){
   postMessage({ type: 'depsLoad_update', value: 'Loading crypto utils..' });
   importScripts("/assets/js/buffer.js");
   importScripts("/assets/js/solidity.js");
+  importScripts("/assets/js/bitcoinjs.js");
   importScripts("/assets/js/multihashes.js");
   importScripts("/scripts/bundle.js");
 }
@@ -124,17 +121,16 @@ var ethnode_err_n = 0;
 
 // Function to make new web3 request
 function ethnode_node_req(node){
+  /*
   web3 = new Web3();
   web3.setProvider(new web3.providers.HttpProvider(node));
+  */
 }
 
-function checkChain(){
-  try {
-    var genesis = web3.eth.getBlock(0).hash;
-  } catch(e){}
-
-  if(genesis=='0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3') return 'mainnet';
-  else if(genesis=='0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d') return 'testnet';
+function checkChain(hash){
+  var genesis = hash;
+  if(genesis=='000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f') return 'mainnet';
+  else if(genesis=='000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943') return 'testnet';
   else return false;
 }
 
@@ -431,8 +427,8 @@ function checkProof(proofi){
 
   // set hour and minutes for every block (Hours:Minutes)
   for(var j=0; j<blockList.length; j++){
-    if (parseInt(blockList[j].number/step) == blockn){
-      var tsp = blockList[j].timestamp*1000;
+    if (parseInt(blockList[j].height/step) == blockn){
+      var tsp = blockList[j].time*1000;
       var h = new Date(tsp).getHours();
       var m = new Date(tsp).getMinutes();
       if (h < 10) h = "0"+h;
@@ -605,71 +601,32 @@ function convertBase(str, fromBaseAlphabet, toBaseAlphabet) {
 
 var myids = [];
 var query_type = [];
-function getProof(input){
+function processProof(input){
+  console.log(input);
   var proofID = input;
-  input = input.replace("0x","");
-  var signature4byte = input.substr(0,8);
-  var inputdata = input.substr(8);
-  var decodedSignature = "";
-  if(signature4byte=="27dc297e"){
-      // no proof
-      return false;
-  } else if(signature4byte=="38bbfa50"){
+  var decodedSignature = proofID;
       // proof
-      decodedSignature = solidity.decodeParams(["bytes32","string","bytes"],inputdata);
-      var myIdExtracted = decodedSignature[0].replace('0x','');
-      var proofContent = decodedSignature[2].replace("0x","");
-      var proofContentAscii = web3.toAscii(proofContent);
-      if(proofContentAscii=='None' || decodedSignature[2]=='0x' || proofContentAscii=='') return false;
-      console.log(myIdExtracted);
-      console.log(decodedSignature[2]);
-      if(typeof(query_type[myIdExtracted])=='undefined'){
-        query_type[myIdExtracted] = [];
-        /*get_query_info(myIdExtracted, function(result) {
-          var query_info = result;
-          try {
-            var datasource_type = query_info['result']['payload']['conditions'][0]['datasource'];
-            var full_query = query_info['result']['payload']['conditions'][0]['query'];
-            var query_result = query_info['result']['checks'][query_info['result']['checks'].length-1]['results'][0];
-            query_type[myIdExtracted] = [datasource_type,full_query,query_result];
-          } catch(e) {
-            console.error(e);
-          }
-        });*/
-      }
-      if(decodedSignature[2].length>70){
+      var proofContentAscii = decodedSignature;
+      if(proofContentAscii==null || proofContentAscii=='') return false;
+      if(typeof decodedSignature == 'object'){
         console.log('****** NOT VALID ');
         var checkIfJson = proofContentAscii.indexOf("{");
         if(checkIfJson!==-1){
           try {
-            proofContent = JSON.parse(proofContentAscii.replace(/'/g,'"'));
+            proofContent = proofContentAscii;
             if(proofContent.type=='hex' && typeof(proofContent.value)!='undefined'){
               proofContent = proofContent.value;
             }
           } catch(e) {}
         }
-        myids[proofContent] = [];
-        myids[proofContent] = [myIdExtracted,true];
         return proofContent;
       } else {
-        proofID = base58.fromHex((decodedSignature[2]).replace("0x",""));
+        proofID = base58.fromHex(decodedSignature);
         if(isValidMultihash(proofID)){
           console.log('****** VALID');
-          myids[proofID] = [];
-          myids[proofID] = [myIdExtracted,false];
           return proofID;
-        }
+        } else return false;
       }
-  } else if(signature4byte=="7d242ae5"){
-      // base price tx (with proof)
-      decodedSignature = solidity.decodeParams(["uint","bytes"],inputdata);
-      proofID = base58.fromHex((decodedSignature[1]).replace("0x",""));
-      if(isValidMultihash(proofID)){
-        return proofID;
-      }
-  } else {
-     return false
-  }
 }
 
 function updateChart(type,result,datas,proofi,proof,time,w){
@@ -721,6 +678,110 @@ function updateChart(type,result,datas,proofi,proof,time,w){
   setTimeout(function(cpi){ checkProof(cpi); }, 3*200, newproofi);
 }
 
+function timeConverter(UNIX_timestamp){
+  var d = new Date(UNIX_timestamp * 1000);
+  var mm = d.getMonth() + 1; // getMonth() is zero-based
+  var dd = d.getDate();
+
+  return [d.getFullYear(),
+          (mm>9 ? '' : '0') + mm,
+          (dd>9 ? '' : '0') + dd
+         ].join('-');
+}
+
+function getToday(){
+  return timeConverter(Math.floor(Date.now() / 1000));
+}
+
+function getRawBlock(hash, callback){
+  var xhr2 = new XMLHttpRequest();
+  xhr2.open('GET', active_ethnode_node+'/api/rawblock/'+hash, true);
+  xhr2.responseType = 'json';
+  xhr2.timeout = timeout_xhr_req;
+  xhr2.onload = function(e) {
+    if (this.status == 200) {
+      var rawBlock = this.response['rawblock'];
+      callback(null, rawBlock);
+    } else return callback(new Error('request error'), null);
+  };
+
+  // Manage XHR error
+  xhr2.onerror = function(e){
+    return callback(e, null);
+  };
+
+  // Manage XHR Timeouts
+  xhr2.ontimeout = function(e){
+    return callback(e, null);
+  };
+
+  xhr2.send();
+}
+
+var filterBlock = [];
+function processAllBlocks(startFrom, date, callback){
+  console.log(date);
+  var xhr2 = new XMLHttpRequest();
+  xhr2.open('GET', active_ethnode_node+'/api/blocks?blockDate='+date, true);
+  xhr2.responseType = 'json';
+  xhr2.timeout = timeout_xhr_req;
+  xhr2.onload = function(e) {
+    if (this.status == 200) {
+      var blocks = this.response['blocks'];
+      for (var i = 0; i < blocks.length; i++) {
+        if(blocks[i].time > (startFrom-12*60*60)) {
+          filterBlock.push(blocks[i]);
+        }
+      }
+      if(timeConverter((startFrom-12*60*60)) != date) {
+        processAllBlocks(startFrom, timeConverter((startFrom-12*60*60)), callback);
+      } else {
+        callback(null, filterBlock);
+      }
+    } else return callback(new Error('request error'), null);
+  };
+
+  // Manage XHR error
+  xhr2.onerror = function(e){
+    return callback(e, null);
+  };
+
+  // Manage XHR Timeouts
+  xhr2.ontimeout = function(e){
+    return callback(e, null);
+  };
+
+  xhr2.send();
+}
+
+function getCurrentBlock(callback) {
+  var xhr2 = new XMLHttpRequest();
+  xhr2.open('GET', active_ethnode_node+'/api/status/', true);
+  xhr2.responseType = 'json';
+  xhr2.timeout = timeout_xhr_req;
+  xhr2.onload = function(e) {
+    if (this.status == 200) {
+      callback(null, this.response['info']['blocks']);
+    } else return callback(new Error('request error'), null);
+  };
+
+  // Manage XHR error
+  xhr2.onerror = function(e){
+    return callback(e, null);
+  };
+
+  // Manage XHR Timeouts
+  xhr2.ontimeout = function(e){
+    return callback(e, null);
+  };
+
+  xhr2.send();
+}
+
+function getBlock() {
+
+}
+
 function resetProxy(){
     postMessage({ type: 'textUpdate', value: ['ipfs_lastid',"reset"]});
     postMessage({ type: 'textUpdate', value: ['lasthash',"reset"]});
@@ -733,7 +794,7 @@ function fixDataSource(){
     console.log('blocknn '+blockn);
     if (ourTxs.hasOwnProperty(blockn)) {
       for (l=0; l<ourTxs[blockn][1].length; l++){
-        var proofID = getProof(ourTxs[blockn][1][l].input);
+        var proofID = processProof(ourTxs[blockn][1][l].input);
         proofs.push([blockn, ourTxs[blockn][1][l].input, proofID]);
       }
       var alreadythere = false;
@@ -748,13 +809,12 @@ function fixDataSource(){
     }
   }
 
-
   var nds = [];
   for(i=0; i<dataSource.length; i++){
     blockn = dataSource[i].block_n;
     for(j=0; j<blockList.length; j++){
-      if (parseInt(blockList[j].number/step) == blockn){
-        var tsp = blockList[j].timestamp*1000;
+      if (parseInt(blockList[j].height/step) == blockn){
+        var tsp = blockList[j].time*1000;
         var h = new Date(tsp).getHours();
         var m = new Date(tsp).getMinutes();
         if (h < 10) h = "0"+h;
@@ -802,7 +862,7 @@ var ethnode_select_box_changed = 0;
 
 var append_to_myid = '';
 
-function changeWeb3Node(){
+function changeInsightNode(){
   // Change ethnode node
   console.log('Changing ethereum node');
   var old_ethnode = active_ethnode_node;
@@ -828,12 +888,107 @@ function changeWeb3Node(){
   return;
 }
 
+var oraclizeMarkers = [];
+function getOraclizeMarkers(){
+  var xhr2 = new XMLHttpRequest();
+  xhr2.open('POST', 'https://api.oraclize.it/v1/contract/filter?include_markers=true', false);
+  xhr2.setRequestHeader("Content-type", "application/json");
+  xhr2.timeout = 1000*60;
+  xhr2.onload = function(e) {
+    if (this.status == 200) { 
+      Array.prototype.push.apply(oraclizeMarkers, JSON.parse(this.response).result.rows);
+      //oraclizeMarkers.push();
+      return true;
+    } else return console.error('oraclize request error')
+  };
+
+  // Manage XHR error
+  xhr2.onerror = function(e){
+    return console.error(e,'oraclize request error')
+  };
+
+  // Manage XHR Timeouts
+  xhr2.ontimeout = function(e){
+    return console.error(e,'oraclize request error')
+  };
+
+  var now = Math.floor(Date.now() / 1000);
+  xhr2.send(JSON.stringify({"daterange":[(now-(30*24*60*60)),now]}));
+}
+
+function getMyid(hash){
+  var httpMyId = "";
+  for (var i=0; i < oraclizeMarkers.length; i++) {
+    if(oraclizeMarkers[i]["marker"] == hash) {
+      httpMyId = oraclizeMarkers[i]["id"];
+    }
+  }
+  return httpMyId;
+}
+
+function getProofByMyid(myid){
+  var xhr2 = new XMLHttpRequest();
+  xhr2.open('GET', 'https://api.oraclize.it/v1/contract/'+myid+'/status', false);
+
+  xhr2.onload = function(e) {
+    if (this.status == 200) {
+      var query_info = JSON.parse(this.response).result;
+      var proofType = query_info.payload.conditions[0].proof_type;
+      if(proofType == 0) return '';
+      try {
+        var query_proof = query_info['checks'][query_info['checks'].length-1]['proofs'][0];
+      } catch(e) {
+        return '';
+      }
+      return query_proof;
+    } else return console.error('oraclize request error')
+  };
+
+  // Manage XHR error
+  xhr2.onerror = function(e){
+    return console.error(e,'oraclize request error')
+  };
+
+  // Manage XHR Timeouts
+  xhr2.ontimeout = function(e){
+    return console.error(e,'oraclize request error')
+  };
+
+  xhr2.send();
+}
+
+function processBlock(rawBlock){
+  var block = bitcoinBundle.bitcoin.Block.fromHex(rawBlock);
+  //
+  var ORACLIZE_MARKER = 'ORACLIZE';
+  var ORACLIZE_REGEX = /OP_CODESEPARATOR ([0-9A-Fa-f]{64}) /g;
+  //
+  var markers = [];
+  for (var i=0; i<block.transactions.length; i++){
+    var tx = block.transactions[i];
+    for (var j=0; j<tx.ins.length; j++){
+      var script = tx.ins[j].script;
+      if ((script.toString('hex').indexOf(new Buffer(ORACLIZE_MARKER).toString('hex'))) > -1){
+        var chunks = bitcoinBundle.bitcoin.script.decompile(script);
+        chunks = bitcoinBundle.bitcoin.script.decompile(chunks[chunks.length-1]);
+        while (true){
+          match = ORACLIZE_REGEX.exec(bitcoinBundle.bitcoin.script.toASM(chunks));
+          if (match == null) break;
+          markers.push(match[1]);
+        }
+      }
+    }
+  }
+  return markers;
+}
+
+getOraclizeMarkers();
+
 // sync data and chart every 20 seconds
 function go(){
   postMessage({ type: 'statusUpdate', value: ['ethnode', 2] });
   postMessage({ type: 'hlUpdate', value: ['ethnode', true] });
-  web3.eth.getBlockNumber(function(e, r){
-
+  getCurrentBlock(function(e, r){
     // Mange ethnode errors
     if(e){
     if(ethnode_err_n==0) ethnode_err_n=1;
@@ -845,7 +1000,7 @@ function go(){
       postMessage({ type:'ethnode_retry', value: ethnode_err_n-1 });
       setTimeout(function(){ go(); return; }, timeout_betw_retry_ethnode);
     } else {
-      changeWeb3Node();
+      changeInsightNode();
     }
     
     }
@@ -858,64 +1013,77 @@ function go(){
     }
   
   postMessage({ type: 'statusUpdate', value: ['ethnode', 1] });
-  var chain = checkChain();
-  if(chain){
+  //var chain = checkChain();
+  /*if(chain){
     append_to_myid = 'eth_'+chain+'_';
-  }   
+  }*/ 
   console.log(r)
   txs_count = 0;
   atx = 0;
   txs_loaded = 0;
   var i0;
-  if (blockList.length > 0) i0 = r-blockList[blockList.length-1].number-1; 
+  if (blockList.length > 0) i0 = r-blockList[blockList.length-1].height-1; 
   else i0 = step*sstep; 
   console.log("Downloading "+(i0+1)+" new blocks..");
   var newproofs = 0;
   ourTxs = {}; 
-  for (i=i0; i>=0; i--) web3.eth.getBlock(r-i, true, function(e, r){
+  processAllBlocks(Math.floor(Date.now() / 1000) - 20*60*60, getToday(), function(e, result){
     if(e){
       console.error(e);
       return;
     }
-    if(typeof r == "undefined") return;
-    postMessage({ type: 'textUpdate', value: ['ethnode_lastblockn', "In sync w/ block #"+r.number] });
-    ethnode_kb += r.size/1000;
-    postMessage({ type: 'textUpdate', value: ['ethnode_kb', parseInt(ethnode_kb)] });
-    blockList.push(r);
-    if (typeof ourTxs[parseInt(r.number/step)] == 'undefined') ourTxs[parseInt(r.number/step)] = [[], []];
-    txs_count += r.transactions.length;
-    var cbAddressActive = cbAddress[chain];
-    postMessage({ type: 'blockLoad_update', value: parseInt(100*blockList.length/(step*sstep)) });
-    for (k=0; k<r.transactions.length; k++){
-
-      // Check if the sender address is from Oraclize
-      if (r.transactions[k].from == cbAddressActive){
-        atx++;
-        //console.log(JSON.stringify(r.transactions[k]));
-        if (getProof(r.transactions[k].input) != false){
-          // proof is there!
-          console.log("proof!");
-          newproofs++;
-          ourTxs[parseInt(r.number/step)][1].push(r.transactions[k]);
-        } else ourTxs[parseInt(r.number/step)][0].push(r.transactions[k]);
-      }
-      txs_loaded++;
+    console.log(result);
+    for (var i = 0; i < result.length; i++) {
+      var r = result[i];
+      //console.log(r);
+      if(typeof r == "undefined") continue;
+      postMessage({ type: 'textUpdate', value: ['ethnode_lastblockn', "In sync w/ block #"+r.height] });
+      ethnode_kb += r.size/1000;
+      postMessage({ type: 'textUpdate', value: ['ethnode_kb', parseInt(ethnode_kb)] });
+      blockList.push(r);
+      if (typeof ourTxs[parseInt(r.height/step)] == 'undefined') ourTxs[parseInt(r.height/step)] = [[], []];
+      txs_count += r.length;
+      //var cbAddressActive = cbAddress[chain];
+      //postMessage({ type: 'blockLoad_update', value: parseInt(100*blockList.length/(step*sstep)) });
+      getRawBlock(r['hash'], function(err,res){
+        if(err) return;
+        // Check if block contains an Oraclize marker
+        var markers = processBlock(res);
+        console.log(markers);
+        if (typeof markers !== 'undefined' && typeof markers != 'null' && markers.length>0){
+          for (var j = 0; j < markers.length; j++) {
+            atx++;
+            //console.log(JSON.stringify(r[k]));
+            var httpMyid = getMyid(markers[j]);
+            console.log("myid "+ httpMyid);
+            if(typeof httpMyid != 'undefined' && httpMyid != ''){
+              if (processProof(getProofByMyid(httpMyid)) != false){
+                // proof is there!
+                console.log("proof!");
+                newproofs++;
+                ourTxs[parseInt(r.height/step)][1].push(r);
+              } else ourTxs[parseInt(r.height/step)][0].push(r);
+            } else ourTxs[parseInt(r.height/step)][0].push(r);
+          }
+        } else ourTxs[parseInt(r.height/step)][0].push(r);
+        txs_loaded++;
+        txmonli = setInterval(function(){
+        setTimeout(function(){
+          postMessage({ 'type': "honesty_show" });
+          var proofsoffset = proofs.length;
+          fixDataSource();
+          postMessage({ 'type': "honesty_update", 'value': "<span style='color: orange'>checking proofs..</span>" });
+          checkProofs(proofsoffset);
+        }, 2500);
+        postMessage({ type: 'statusUpdate', value: ['ethnode', 1] });
+        postMessage({ type: 'hlUpdate', value: ['ethnode', false] });
+        postMessage({ type: 'hlUpdate', value: ['chart', false] });
+        postMessage({ type: 'chartUpdate', value: dataSource });
+        clearInterval(txmonli);
+        }, 800);
+      });
     }
   });
-  txmonli = setInterval(function(){ if (blockList.length >= step*sstep){
-  setTimeout(function(){
-    postMessage({ 'type': "honesty_show" });
-    var proofsoffset = proofs.length;
-    fixDataSource();
-    postMessage({ 'type': "honesty_update", 'value': "<span style='color: orange'>checking proofs..</span>" });
-    checkProofs(proofsoffset);
-  }, 2500);
-  postMessage({ type: 'statusUpdate', value: ['ethnode', 1] });
-  postMessage({ type: 'hlUpdate', value: ['ethnode', false] });
-  postMessage({ type: 'hlUpdate', value: ['chart', false] });
-  postMessage({ type: 'chartUpdate', value: dataSource });
-  clearInterval(txmonli);
-  }  }, 800);
 }
 });
 }
