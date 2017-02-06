@@ -501,7 +501,12 @@ function checkProofs(offset){
   honestyci = setInterval(function(){
     if (proofsok == proofs.length){
       postMessage({ type: 'chartUpdate_force', value: dataSource });
-      postMessage({ 'type': "honesty_update", 'value': "<span style=\"/* text-decoration: underline; */ color: darkgreen;border: 2px solid darkgreen;padding: 4px;border-radius: 7px;box-shadow: 60px 0px 0px 0px lightgreen inset;\">verified</span>" }); //$("#oraclehonesty").html("<span style='text-decoration: underline; color: darkgreen;'>verified</span>");
+      if(validityOfSignature == true){
+        postMessage({ 'type': "honesty_update", 'value': "<span style=\"/* text-decoration: underline; */ color: darkgreen;border: 2px solid darkgreen;padding: 4px;border-radius: 7px;box-shadow: 60px 0px 0px 0px lightgreen inset;\">verified</span>" }); //$("#oraclehonesty").html("<span style='text-decoration: underline; color: darkgreen;'>verified</span>");
+      }
+      else {
+        postMessage({ 'type': "honesty_update", 'value': "<span style=\"/* text-decoration: underline; */ color: #333;border: 2px solid #ffcc00;padding: 4px;border-radius: 7px;box-shadow: 60px 0px 0px 0px #ffcc00 inset;\">Not verified</span>" }); //$("#oraclehonesty").html("<span style='text-decoration: underline; color: darkgreen;'>verified</span>");
+      }
       setTimeout(go, 20*1000);
       clearInterval(honestyci);
     }
@@ -724,7 +729,7 @@ function processAllBlocks(startFrom, date, callback){
   var xhr2 = new XMLHttpRequest();
   xhr2.open('GET', active_ethnode_node+'/api/blocks?blockDate='+date, true);
   xhr2.responseType = 'json';
-  xhr2.timeout = timeout_xhr_req;
+  xhr2.timeout = 60000;
   xhr2.onload = function(e) {
     if (this.status == 200) {
       var blocks = this.response['blocks'];
@@ -848,6 +853,7 @@ var txs_loaded = 0;
 
 var dataSource = [];
 var blockList = [];
+var blockList2 = [];
 var ourTxs = {};
 var txs_count = 0;
 
@@ -889,10 +895,14 @@ function changeInsightNode(){
 }
 
 var oraclizeMarkers = [];
-function getOraclizeMarkers(){
+function getOraclizeMarkers(timestamp){
+  var fromTime = timestamp + (60*60*3);
+  var toTime = timestamp - (60*60*3 + 60*60*24);
+
   var xhr2 = new XMLHttpRequest();
   xhr2.open('POST', 'https://api.oraclize.it/v1/contract/filter?include_markers=true', false);
   xhr2.setRequestHeader("Content-type", "application/json");
+
   xhr2.timeout = 1000*60;
   xhr2.onload = function(e) {
     if (this.status == 200) { 
@@ -913,7 +923,7 @@ function getOraclizeMarkers(){
   };
 
   var now = Math.floor(Date.now() / 1000);
-  xhr2.send(JSON.stringify({"daterange":[(now-(30*24*60*60)),now]}));
+  xhr2.send(JSON.stringify({"daterange":[fromTime, toTime]}));
 }
 
 function getMyid(hash){
@@ -926,7 +936,7 @@ function getMyid(hash){
   return httpMyId;
 }
 
-function getProofByMyid(myid, callback){
+function getProofByMyid(marker, myid, callback){
   var xhr2 = new XMLHttpRequest();
   xhr2.open('GET', 'https://api.oraclize.it/v1/contract/'+myid+'/status', false);
   var proofListArray = [];
@@ -935,6 +945,7 @@ function getProofByMyid(myid, callback){
     if (this.status == 200) {
       var proofListArray = [];
       var query_info = JSON.parse(this.response).result;
+      console.log(JSON.stringify(query_info));
       var conditionsLength = query_info.payload.conditions;//[0].proof_type;
       for (var i = 0; i < conditionsLength.length; i++) {
         if(conditionsLength[i].proof_type == 0) proofListArray.push('');
@@ -944,6 +955,16 @@ function getProofByMyid(myid, callback){
               //if(query_info['checks'][k]['timestamp'] < (Math.floor(Date.now() / 1000)-12*60*60)) continue;
               for (var j = 0; j < query_info['checks'][k]['proofs'].length; j++) {
                 proofListArray.push(query_info['checks'][k]['proofs'][j]);
+              }
+            }
+            if(markersWithSign.indexOf(marker) > -1) {
+              var lastCheck = query_info[query_info['checks'].length-1]; // get latest check
+              if(lastCheck.match == true) {
+                console.log("Valid signature");
+                validityOfSignature = true;
+              } else {
+                console.log("*** Invalid signature");
+                validityOfSignature = false;
               }
             }
           }
@@ -966,12 +987,16 @@ function getProofByMyid(myid, callback){
   xhr2.send();
 }
 
+var validityOfSignature = true;
+var markersWithSign = [];
+
 function processBlock(rawBlock){
   var block = bitcoinBundle.bitcoin.Block.fromHex(rawBlock);
   //
   var ORACLIZE_MARKER = 'ORACLIZE';
   var ORACLIZE_REGEX = /OP_CODESEPARATOR ([0-9A-Fa-f]{64}) /g;
   //
+  getOraclizeMarkers(block.timestamp);
   var markers = [];
   for (var i=0; i<block.transactions.length; i++){
     var tx = block.transactions[i];
@@ -980,18 +1005,25 @@ function processBlock(rawBlock){
       if ((script.toString('hex').indexOf(new Buffer(ORACLIZE_MARKER).toString('hex'))) > -1){
         var chunks = bitcoinBundle.bitcoin.script.decompile(script);
         chunks = bitcoinBundle.bitcoin.script.decompile(chunks[chunks.length-1]);
+        var localmarkers = [];
         while (true){
           match = ORACLIZE_REGEX.exec(bitcoinBundle.bitcoin.script.toASM(chunks));
           if (match == null) break;
+          localmarkers.push(match[1]);
           markers.push(match[1]);
         }
+        var signedmarker = getSignedMarker(tx.ins[j], localmarkers);
+        if(signedmarker !== null) markersWithSign.push(signedmarker);
       }
     }
   }
   return markers;
 }
 
-getOraclizeMarkers();
+// fake fnc
+function getSignedMarker(a, b){
+  return b[0];
+}
 
 function asyncLoop(iterations, func, callback) {
     var index = 0;
@@ -1072,8 +1104,9 @@ function go(){
   else i0 = step*sstep; 
   console.log("Downloading "+(i0+1)+" new blocks..");
   var newproofs = 0;
-  ourTxs = {}; 
-  processAllBlocks(Math.floor(Date.now() / 1000), getToday(), function(e, result){
+  ourTxs = {};
+  //Math.floor(Date.now() / 1000) - (24*60*60), getToday()
+  processAllBlocks(1484438401, '2017-01-16', function(e, result){
     if(e){
       console.error(e);
       return;
@@ -1106,7 +1139,8 @@ function go(){
             var httpMyid = getMyid(markers[j]);
             console.log("myid "+ httpMyid);
             if(typeof httpMyid != 'undefined' && httpMyid != ''){
-              getProofByMyid(httpMyid, function(proofList){
+              getProofByMyid(markers[j], httpMyid, function(proofList){
+                console.log("proof list",proofList);
                 for (var z = 0; z < proofList.length; z++) {
                   atx++;
                   if (processProof(proofList[z]) != false){
@@ -1131,19 +1165,16 @@ function go(){
 }
 
 function startChart(){
-  txmonli = setInterval(function(){
   setTimeout(function(){
     postMessage({ 'type': "honesty_show" });
     var proofsoffset = proofs.length;
     fixDataSource();
     postMessage({ 'type': "honesty_update", 'value': "<span style='color: orange'>checking proofs..</span>" });
     checkProofs(proofsoffset);
-  }, 2500);
   postMessage({ type: 'statusUpdate', value: ['ethnode', 1] });
   postMessage({ type: 'hlUpdate', value: ['ethnode', false] });
   postMessage({ type: 'hlUpdate', value: ['chart', false] });
   postMessage({ type: 'chartUpdate', value: dataSource });
-  clearInterval(txmonli);
   }, 800);
 }
 

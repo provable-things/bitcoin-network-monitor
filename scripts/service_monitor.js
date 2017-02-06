@@ -203,7 +203,7 @@ try{
   if(typeof(w) == "undefined") {
 
     // Initialize a new Web Worker
-    w = new Worker("scripts/widget_monitor.js");
+    w = new Worker("/scripts/widget_monitor.js");
 
     // If Web Worker is not available (or we get an error), use fallback
     w.onerror = function(event){
@@ -599,7 +599,7 @@ function loadWidgetStd(){
     $('body').append("<script src='"+url+"'></script>");
   }
 
-  $.importScripts("scripts/widget_monitor.js");
+  $.importScripts("/scripts/widget_monitor.js");
 }
 
 
@@ -674,6 +674,6 @@ $('#ipfs_gateways').on('change', function() {
 
 function resetWW(){
 	w.terminate();
-	w = new Worker("scripts/widget_monitor.js");
+	w = new Worker("/scripts/widget_monitor.js");
 	w.onmessage = processWidgetEv;
 }
