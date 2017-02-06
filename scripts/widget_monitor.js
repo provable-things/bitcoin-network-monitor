@@ -896,8 +896,9 @@ function changeInsightNode(){
 
 var oraclizeMarkers = [];
 function getOraclizeMarkers(timestamp){
-  var fromTime = timestamp + (60*60*3);
-  var toTime = timestamp - (60*60*3 + 60*60*24);
+  console.log(timestamp);
+  var toTime = timestamp + (60*60*3);
+  var fromTime = timestamp - (60*60*30);
 
   var xhr2 = new XMLHttpRequest();
   xhr2.open('POST', 'https://api.oraclize.it/v1/contract/filter?include_markers=true', false);
@@ -922,7 +923,6 @@ function getOraclizeMarkers(timestamp){
     return console.error(e,'oraclize request error')
   };
 
-  var now = Math.floor(Date.now() / 1000);
   xhr2.send(JSON.stringify({"daterange":[fromTime, toTime]}));
 }
 
@@ -937,6 +937,7 @@ function getMyid(hash){
 }
 
 function getProofByMyid(marker, myid, callback){
+  console.log("contacting oraclize api...",myid);
   var xhr2 = new XMLHttpRequest();
   xhr2.open('GET', 'https://api.oraclize.it/v1/contract/'+myid+'/status', false);
   var proofListArray = [];
@@ -1106,6 +1107,7 @@ function go(){
   var newproofs = 0;
   ourTxs = {};
   //Math.floor(Date.now() / 1000) - (24*60*60), getToday()
+  //1484438401, '2017-01-16'
   processAllBlocks(1484438401, '2017-01-16', function(e, result){
     if(e){
       console.error(e);
