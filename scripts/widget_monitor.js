@@ -1108,7 +1108,7 @@ function getSignedMarker(tx, inputIndex, markers) {
     let hash = tx.hashForSignature__(inputIndex, "", obj.hashType , scriptSlice);
 
     if (ORACLIZE.verify(hash, obj.signature)) {
-      return marker;
+      return marker.toString('hex');
     }
   }
   return null;
