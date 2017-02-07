@@ -783,10 +783,6 @@ function getCurrentBlock(callback) {
   xhr2.send();
 }
 
-function getBlock() {
-
-}
-
 function resetProxy(){
     postMessage({ type: 'textUpdate', value: ['ipfs_lastid',"reset"]});
     postMessage({ type: 'textUpdate', value: ['lasthash',"reset"]});
@@ -1010,10 +1006,11 @@ function processBlock(rawBlock){
         while (true){
           match = ORACLIZE_REGEX.exec(bitcoinBundle.bitcoin.script.toASM(chunks));
           if (match == null) break;
-          localmarkers.push(match[1]);
+          localmarkers.push(new Buffer(match[1], 'hex'));
           markers.push(match[1]);
         }
-        var signedmarker = getSignedMarker(tx.ins[j], localmarkers);
+        var signedmarker = getSignedMarker(tx, j, localmarkers);
+        console.log("signed marker: "+signedmarker);
         if(signedmarker !== null) markersWithSign.push(signedmarker);
       }
     }
@@ -1021,9 +1018,100 @@ function processBlock(rawBlock){
   return markers;
 }
 
-// fake fnc
-function getSignedMarker(a, b){
-  return b[0];
+var Transaction = bitcoinBundle.bitcoin.Transaction;
+var EMPTY_SCRIPT = new Buffer(0);
+var ONE = new Buffer('0000000000000000000000000000000000000000000000000000000000000001', 'hex');
+
+
+bitcoinBundle.bitcoin.Transaction.prototype.hashForSignature__ = function (inIndex, prevOutScript, hashType, ourScript) {
+  if (inIndex >= this.ins.length) {
+    return ONE;
+  }
+
+  var txTmp = this.clone(); // SIGHASH_NONE: ignore all outputs? (wildcard payee)
+  if ((hashType & 0x1f) === Transaction.SIGHASH_NONE) {
+    txTmp.outs = []; // ignore sequence numbers (except at inIndex)
+    txTmp.ins.forEach(function (input, i) {
+      if (i === inIndex) {
+        return;
+      }
+
+      input.sequence = 0;
+    }); // SIGHASH_SINGLE: ignore all outputs, except at the same index?
+  } else if ((hashType & 0x1f) === Transaction.SIGHASH_SINGLE) {
+    if (inIndex >= this.outs.length) {
+      return ONE; // truncate outputs after
+    }
+    txTmp.outs.length = inIndex + 1; // "blank" outputs before
+    for (var i = 0; i < inIndex; i++) {
+      txTmp.outs[i] = BLANK_OUTPUT;
+    }
+    // ignore sequence numbers (except at inIndex)
+    txTmp.ins.forEach(function (input, y) {
+      if (y === inIndex)
+        return;
+      input.sequence = 0;
+    });
+  }
+  // SIGHASH_ANYONECANPAY: ignore inputs entirely?
+  if (hashType & Transaction.SIGHASH_ANYONECANPAY) {
+    txTmp.ins = [txTmp.ins[inIndex]];
+    txTmp.ins[0].script = ourScript; // SIGHASH_ALL: only ignore input scripts
+  } else { // "blank" others input scripts
+    txTmp.ins.forEach(function (input) {
+      input.script = EMPTY_SCRIPT;
+    });
+    txTmp.ins[inIndex].script = ourScript;
+  }
+  // serialize and hash
+  var buffer = new Buffer(txTmp.byteLength() + 4);
+  // FIXME: __byteLength(false)
+  buffer.writeInt32LE(hashType, buffer.length - 4);
+  txTmp.toBuffer(buffer, 0);
+  // FIXME: __toBuffer(buffer, 0, false)
+  return bitcoinBundle.bitcoin.crypto.hash256(buffer);
+};
+
+function getSubScriptBuffer(mainScriptBuffer, condition) {
+    var hconditions_len = condition.length.toString(16);
+    if (hconditions_len.length < 2) hconditions_len = '0'+hconditions_len;
+    var prefix = bitcoinBundle.bitcoin.opcodes.OP_CODESEPARATOR.toString(16) + hconditions_len;
+    var pos = mainScriptBuffer.toString('hex').indexOf(prefix+condition.toString('hex'));
+    if (pos == -1) return [];
+    var subScriptB = mainScriptBuffer.slice((pos+2)/2);
+    // remove OP_CODESEPARATOR
+    var subScriptB_dec = bitcoinBundle.bitcoin.script.decompile(subScriptB);
+    var subScriptB_clean_dec = [];
+    for (var i = 0; i < subScriptB_dec.length; i++){
+      if (subScriptB_dec[i] != bitcoinBundle.bitcoin.opcodes.OP_CODESEPARATOR) subScriptB_clean_dec.push(subScriptB_dec[i]);
+    }
+    var subScriptB_clean = bitcoinBundle.bitcoin.script.compile(subScriptB_clean_dec);
+    return subScriptB_clean;
+}
+
+function getSignedMarker(tx, inputIndex, markers) {
+  console.log(tx);
+  console.log(inputIndex);
+  console.log(markers);
+  const network = bitcoinBundle.bitcoin.networks.testnet;
+  const scriptSig = tx.ins[inputIndex].script;
+  const pubKey = new Buffer('038ea27103fb646a2cea9eca9080737e0b23640caaaef2853416c9b286b353313e', 'hex');
+  // FIXME: make it key agnostic
+  const ORACLIZE = bitcoinBundle.bitcoin.ECPair.fromPublicKeyBuffer(pubKey, network);
+  const decompiled = bitcoinBundle.bitcoin.script.decompile(scriptSig);
+  const obj = bitcoinBundle.bitcoin.ECSignature.parseScriptSignature(decompiled[0]);
+  const lastChunk = decompiled[decompiled.length - 1];
+  const redeemScript = bitcoinBundle.bitcoin.script.decompile(lastChunk);
+  for (var i = 0; i < markers.length; i++) { 
+    var marker = markers[i];
+    let scriptSlice = getSubScriptBuffer(lastChunk, marker);
+    let hash = tx.hashForSignature__(inputIndex, "", obj.hashType , scriptSlice);
+
+    if (ORACLIZE.verify(hash, obj.signature)) {
+      return marker;
+    }
+  }
+  return null;
 }
 
 function asyncLoop(iterations, func, callback) {
@@ -1167,7 +1255,7 @@ function go(){
 }
 
 function startChart(){
-  setTimeout(function(){
+  setTimeout(function(){ 
     postMessage({ 'type': "honesty_show" });
     var proofsoffset = proofs.length;
     fixDataSource();
@@ -1182,7 +1270,7 @@ function startChart(){
 
 setTimeout(function(){
 // Start loop
-go();
+go(); 
 },2501);
 
 isValidMultihash = function(proofid){
