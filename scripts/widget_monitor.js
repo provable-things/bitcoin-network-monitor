@@ -897,8 +897,8 @@ function changeInsightNode(){
 var oraclizeMarkers = [];
 function getOraclizeMarkers(timestamp){
   console.log(timestamp);
-  var toTime = timestamp + (60*60*3);
-  var fromTime = timestamp - (60*60*30);
+  var toTime = timestamp + (60*60*100);
+  var fromTime = timestamp - (60*60*100);
 
   var xhr2 = new XMLHttpRequest();
   xhr2.open('POST', 'https://api.oraclize.it/v1/contract/filter?include_markers=true', false);
@@ -997,7 +997,7 @@ function processBlock(rawBlock){
   var ORACLIZE_MARKER = 'ORACLIZE';
   var ORACLIZE_REGEX = /OP_CODESEPARATOR ([0-9A-Fa-f]{64}) /g;
   //
-  getOraclizeMarkers(block.timestamp);
+  if(oraclizeMarkers.length == 0) getOraclizeMarkers(block.timestamp);
   var markers = [];
   for (var i=0; i<block.transactions.length; i++){
     var tx = block.transactions[i];
