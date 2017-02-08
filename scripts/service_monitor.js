@@ -401,7 +401,7 @@ function processWidgetEv(event){
     $('.active_ethnode_node').hide();
 
     if($('#ethnode_busy').html().indexOf("Retry # 3")>=0){
-      $('#ethnode_busy').html('<span style="" class="fa fa-spin fa-spinner"></span> Connecting to RPC node, ');
+      $('#ethnode_busy').html('<span style="" class="fa fa-spin fa-spinner"></span> Connecting to Insight node, ');
     }
 
     if($('#ethnode_busy').html().indexOf("Retry")>=0) $('#ethnode_busy').html($('#ethnode_busy').html().replace(/Retry.+, /,""));

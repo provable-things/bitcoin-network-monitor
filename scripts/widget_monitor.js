@@ -110,7 +110,7 @@ if ((typeof stdLoad == 'undefined')||(stdLoad == false)){
 
 postMessage({ type: 'statusUpdate', value: ['tlsn', 1] });
 postMessage({ type: 'statusUpdate', value: ['ethnode', 0] });
-postMessage({ type: 'depsLoad_update', value: 'Connecting to ethnode..' });
+postMessage({ type: 'depsLoad_update', value: 'Connecting to bitcoin insight node..' });
 
 // Connect to ethereum node
 var Web3 = require('web3');
@@ -1265,11 +1265,12 @@ function startChart(){
   postMessage({ type: 'hlUpdate', value: ['chart', false] });
   postMessage({ type: 'chartUpdate', value: dataSource });
   }, 800);
+
 }
 
 setTimeout(function(){
 // Start loop
-go(); 
+go();
 },2501);
 
 isValidMultihash = function(proofid){
