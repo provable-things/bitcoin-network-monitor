@@ -944,6 +944,18 @@ function getProofByMyid(marker, myid, callback){
       var query_info = JSON.parse(this.response).result;
       console.log(JSON.stringify(query_info));
       var conditionsLength = query_info.payload.conditions;//[0].proof_type;
+      if(typeof query_info['checks'] !== 'undefined') {
+        if(markersWithSign.indexOf(marker) > -1) {
+          var lastCheck = query_info['checks'][query_info['checks'].length-1]; // get latest check
+          if(lastCheck.match == true) {
+            console.log("Valid signature");
+            validityOfSignature = true;
+          } else {
+            console.log("*** Invalid signature");
+            validityOfSignature = false;
+          }
+        }
+      }
       for (var i = 0; i < conditionsLength.length; i++) {
         if(conditionsLength[i].proof_type == 0) proofListArray.push('');
         else if(typeof query_info['checks'] !== 'undefined') {
@@ -952,16 +964,6 @@ function getProofByMyid(marker, myid, callback){
               //if(query_info['checks'][k]['timestamp'] < (Math.floor(Date.now() / 1000)-12*60*60)) continue;
               for (var j = 0; j < query_info['checks'][k]['proofs'].length; j++) {
                 proofListArray.push(query_info['checks'][k]['proofs'][j]);
-              }
-            }
-            if(markersWithSign.indexOf(marker) > -1) {
-              var lastCheck = query_info[query_info['checks'].length-1]; // get latest check
-              if(lastCheck.match == true) {
-                console.log("Valid signature");
-                validityOfSignature = true;
-              } else {
-                console.log("*** Invalid signature");
-                validityOfSignature = false;
               }
             }
           }
@@ -1090,9 +1092,6 @@ function getSubScriptBuffer(mainScriptBuffer, condition) {
 }
 
 function getSignedMarker(tx, inputIndex, markers) {
-  console.log(tx);
-  console.log(inputIndex);
-  console.log(markers);
   const network = bitcoinBundle.bitcoin.networks.testnet;
   const scriptSig = tx.ins[inputIndex].script;
   const pubKey = new Buffer('038ea27103fb646a2cea9eca9080737e0b23640caaaef2853416c9b286b353313e', 'hex');
