@@ -1194,8 +1194,8 @@ function go(){
   var newproofs = 0;
   ourTxs = {};
   //Math.floor(Date.now() / 1000) - (24*60*60), getToday()
-  //1484438401, '2017-01-16'
-  processAllBlocks(1484438401, '2017-01-16', function(e, result){
+  //1484438401, '2017-01-16',
+  processAllBlocks(Math.floor(Date.now() / 1000) - (24*60*60), getToday(), function(e, result){
     if(e){
       console.error(e);
       return;
